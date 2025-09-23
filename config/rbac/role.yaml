@@ -1,0 +1,40 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - scheduler.tsurai.jp
+  resources:
+  - tidbclusterschedulers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - scheduler.tsurai.jp
+  resources:
+  - tidbclusterschedulers/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - scheduler.tsurai.jp
+  resources:
+  - tidbclusterschedulers/status
+  verbs:
+  - get
+  - patch
+  - update
