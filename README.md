@@ -1,135 +1,203 @@
-# tidbcloud-operator
-// TODO(user): Add simple overview of use/purpose
+# TiDB Cloud Operator
+
+> ⚠️ **BETA SOFTWARE** - This project is in active development and is not yet production ready. Features may change, and breaking changes may occur between releases.
+
+A Kubernetes Operator for managing TiDB Cloud clusters with automated scaling and scheduling capabilities.
+
+## Features
+
+- **Automated Scaling**: Schedule TiDB Cloud cluster scaling operations based on cron expressions
+- **Cost Optimization**: Automatically suspend and resume clusters during off-hours or weekends
+- **Timezone Support**: Schedule operations in any timezone (IANA format)
+- **Multi-Schedule Support**: Configure multiple schedules per cluster for different operational patterns
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
 
-## Getting Started
+The TiDB Cloud Operator provides Kubernetes-native management of TiDB Cloud Dedicated clusters through Custom Resource Definitions (CRDs). It enables you to:
 
-### Prerequisites
-- go version v1.24.0+
-- docker version 17.03+.
-- kubectl version v1.11.3+.
-- Access to a Kubernetes v1.11.3+ cluster.
+- Schedule automatic cluster scaling operations (scale up during business hours, scale down during off-hours)
+- Implement cost optimization strategies by suspending clusters when not needed
+- Configure complex scheduling patterns with timezone awareness
+- Manage multiple clusters with different scheduling requirements
 
-### To Deploy on the cluster
-**Build and push your image to the location specified by `IMG`:**
+## Prerequisites
 
-```sh
-make docker-build docker-push IMG=<some-registry>/tidbcloud-operator:tag
-```
+- Go version v1.21+
+- Docker version 17.03+
+- kubectl version v1.11.3+
+- Access to a Kubernetes v1.11.3+ cluster
+- TiDB Cloud account with API credentials
 
-**NOTE:** This image ought to be published in the personal registry you specified.
-And it is required to have access to pull the image from the working environment.
-Make sure you have the proper permission to the registry if the above commands don’t work.
+## Quick Start
 
-**Install the CRDs into the cluster:**
+### 1. Install the CRDs
 
 ```sh
 make install
 ```
 
-**Deploy the Manager to the cluster with the image specified by `IMG`:**
+### 2. Configure TiDB Cloud Credentials
+
+Create a Kubernetes secret with your TiDB Cloud API credentials:
 
 ```sh
-make deploy IMG=<some-registry>/tidbcloud-operator:tag
+kubectl create secret generic tidbcloud-credentials \
+  --from-literal=public-key=YOUR_PUBLIC_KEY \
+  --from-literal=private-key=YOUR_PRIVATE_KEY
 ```
 
-> **NOTE**: If you encounter RBAC errors, you may need to grant yourself cluster-admin
-privileges or be logged in as admin.
-
-**Create instances of your solution**
-You can apply the samples (examples) from the config/sample:
+### 3. Deploy the Operator
 
 ```sh
-kubectl apply -k config/samples/
+make deploy
 ```
 
->**NOTE**: Ensure that the samples has default values to test it out.
+### 4. Create a TiDBClusterScheduler
 
-### To Uninstall
-**Delete the instances (CRs) from the cluster:**
+Apply the sample configuration:
 
 ```sh
+kubectl apply -f config/samples/scheduler_v1_tidbclusterscheduler.yaml
+```
+
+Make sure to update the sample with your actual:
+- Project ID
+- Cluster ID
+- Cluster Name
+
+## Configuration Example
+
+```yaml
+apiVersion: scheduler.tsurai.jp/v1
+kind: TiDBClusterScheduler
+metadata:
+  name: my-cluster-scheduler
+spec:
+  clusterRef:
+    projectId: "YOUR_PROJECT_ID"
+    clusterId: "YOUR_CLUSTER_ID"
+    clusterName: "your-cluster-name"
+    credentialsRef:
+      name: tidbcloud-credentials
+
+  timezone: "Asia/Tokyo"
+
+  schedules:
+    # Scale up for business hours (9 AM JST, Monday-Friday)
+    - schedule: "0 9 * * 1-5"
+      description: "Scale up for business hours"
+      scale:
+        tidb:
+          nodeCount: 4
+          nodeSize: "8C16G"
+        tikv:
+          nodeCount: 6
+          nodeSize: "16C64G"
+          storage: 1000
+
+    # Scale down for night time (11 PM JST, Monday-Friday)
+    - schedule: "0 23 * * 1-5"
+      description: "Scale down for night time"
+      scale:
+        tidb:
+          nodeCount: 2
+          nodeSize: "4C8G"
+        tikv:
+          nodeCount: 3
+          nodeSize: "8C16G"
+          storage: 500
+
+    # Weekend suspension (Saturday 2 AM JST)
+    - schedule: "0 2 * * 6"
+      description: "Weekend cost optimization - suspend"
+      suspend: true
+      settings:
+        force: false
+        gracePeriod: "10m"
+        skipIfScaledDown: true
+
+    # Resume on Monday (8 AM JST)
+    - schedule: "0 8 * * 1"
+      description: "Resume for weekday operations"
+      resume: true
+
+  settings:
+    concurrencyLimit: 2
+    operationTimeout: "30m"
+    retryConfig:
+      maxRetries: 3
+      initialDelay: "1m"
+      backoffMultiplier: 200
+      maxDelay: "16m"
+```
+
+## Node Size Options
+
+TiDB Cloud supports the following node sizes:
+
+- `2C8G` - 2 vCPU, 8GB RAM
+- `4C8G` - 4 vCPU, 8GB RAM
+- `4C16G` - 4 vCPU, 16GB RAM
+- `8C16G` - 8 vCPU, 16GB RAM
+- `8C32G` - 8 vCPU, 32GB RAM
+- `16C32G` - 16 vCPU, 32GB RAM
+- `16C64G` - 16 vCPU, 64GB RAM
+- And more...
+
+## Development
+
+### Run Tests
+
+```sh
+make test
+```
+
+### Run Locally
+
+```sh
+make run
+```
+
+### Build and Deploy Custom Image
+
+```sh
+make docker-build docker-push IMG=<your-registry>/tidbcloud-operator:tag
+make deploy IMG=<your-registry>/tidbcloud-operator:tag
+```
+
+## Uninstall
+
+```sh
+# Delete all scheduler instances
 kubectl delete -k config/samples/
-```
 
-**Delete the APIs(CRDs) from the cluster:**
+# Remove the operator
+make undeploy
 
-```sh
+# Remove CRDs
 make uninstall
 ```
 
-**UnDeploy the controller from the cluster:**
+## Troubleshooting
 
+Check operator logs:
 ```sh
-make undeploy
+kubectl logs -n tidbcloud-operator-system deployment/tidbcloud-operator-controller-manager
 ```
 
-## Project Distribution
-
-Following the options to release and provide this solution to the users.
-
-### By providing a bundle with all YAML files
-
-1. Build the installer for the image built and published in the registry:
-
+Check scheduler status:
 ```sh
-make build-installer IMG=<some-registry>/tidbcloud-operator:tag
+kubectl describe tidbclusterscheduler <scheduler-name>
 ```
-
-**NOTE:** The makefile target mentioned above generates an 'install.yaml'
-file in the dist directory. This file contains all the resources built
-with Kustomize, which are necessary to install this project without its
-dependencies.
-
-2. Using the installer
-
-Users can just run 'kubectl apply -f <URL for YAML BUNDLE>' to install
-the project, i.e.:
-
-```sh
-kubectl apply -f https://raw.githubusercontent.com/<org>/tidbcloud-operator/<tag or branch>/dist/install.yaml
-```
-
-### By providing a Helm Chart
-
-1. Build the chart using the optional helm plugin
-
-```sh
-kubebuilder edit --plugins=helm/v1-alpha
-```
-
-2. See that a chart was generated under 'dist/chart', and users
-can obtain this solution from there.
-
-**NOTE:** If you change the project, you need to update the Helm Chart
-using the same command above to sync the latest changes. Furthermore,
-if you create webhooks, you need to use the above command with
-the '--force' flag and manually ensure that any custom configuration
-previously added to 'dist/chart/values.yaml' or 'dist/chart/manager/manager.yaml'
-is manually re-applied afterwards.
 
 ## Contributing
-// TODO(user): Add detailed information on how you would like others to contribute to this project
 
-**NOTE:** Run `make help` for more information on all potential `make` targets
-
-More information can be found via the [Kubebuilder Documentation](https://book.kubebuilder.io/introduction.html)
+This project is in beta. Please report issues and feature requests through GitHub issues.
 
 ## License
 
-Copyright 2025.
+Licensed under the Apache License, Version 2.0. See LICENSE file for details.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+---
 
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-
+> **Note**: This is beta software. Use in production environments at your own risk.
