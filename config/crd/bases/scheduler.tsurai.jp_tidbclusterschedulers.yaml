@@ -1,0 +1,350 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: tidbclusterschedulers.scheduler.tsurai.jp
+spec:
+  group: scheduler.tsurai.jp
+  names:
+    kind: TiDBClusterScheduler
+    listKind: TiDBClusterSchedulerList
+    plural: tidbclusterschedulers
+    singular: tidbclusterscheduler
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: TiDBClusterScheduler is the Schema for the tidbclusterschedulers
+          API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: spec defines the desired state of TiDBClusterScheduler
+            properties:
+              clusterRef:
+                description: Target cluster configuration
+                properties:
+                  clusterId:
+                    description: TiDB Cloud cluster ID
+                    pattern: ^[0-9]+$
+                    type: string
+                  clusterName:
+                    description: Optional cluster name for display
+                    type: string
+                  credentialsRef:
+                    description: Credentials reference
+                    properties:
+                      name:
+                        default: ""
+                        description: |-
+                          Name of the referent.
+                          This field is effectively required, but due to backwards compatibility is
+                          allowed to be empty. Instances of this type with an empty value here are
+                          almost certainly wrong.
+                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                        type: string
+                    type: object
+                    x-kubernetes-map-type: atomic
+                  projectId:
+                    description: TiDB Cloud project ID
+                    pattern: ^[0-9]+$
+                    type: string
+                required:
+                - clusterId
+                - projectId
+                type: object
+              schedules:
+                description: Unified schedules for all operations (scale, suspend,
+                  resume)
+                items:
+                  description: Schedule defines a unified scheduling operation
+                  properties:
+                    description:
+                      description: Human-readable description
+                      maxLength: 256
+                      type: string
+                    resume:
+                      description: Resume operation - if true, resumes the cluster
+                      type: boolean
+                    scale:
+                      description: Scale operation - if present, performs scaling
+                      properties:
+                        tidb:
+                          description: TiDB node scaling
+                          properties:
+                            nodeCount:
+                              description: Number of nodes (scale in/out)
+                              minimum: 1
+                              type: integer
+                            nodeSize:
+                              description: |-
+                                Node specification key based on actual TiDB Cloud offerings
+                                Format: {vCPU}C{RAM_GB}G
+                              pattern: ^(4C16G|8C16G|8C32G|8C64G|16C32G|16C64G|16C128G|32C64G|32C128G|32C256G)$
+                              type: string
+                            storage:
+                              description: Storage per node in GB (scale up only,
+                                applies to TiKV/TiFlash)
+                              maximum: 8000
+                              minimum: 200
+                              type: integer
+                          type: object
+                        tiflash:
+                          description: TiFlash node scaling
+                          properties:
+                            nodeCount:
+                              description: Number of nodes (scale in/out)
+                              minimum: 1
+                              type: integer
+                            nodeSize:
+                              description: |-
+                                Node specification key based on actual TiDB Cloud offerings
+                                Format: {vCPU}C{RAM_GB}G
+                              pattern: ^(4C16G|8C16G|8C32G|8C64G|16C32G|16C64G|16C128G|32C64G|32C128G|32C256G)$
+                              type: string
+                            storage:
+                              description: Storage per node in GB (scale up only,
+                                applies to TiKV/TiFlash)
+                              maximum: 8000
+                              minimum: 200
+                              type: integer
+                          type: object
+                        tikv:
+                          description: TiKV node scaling (must be multiple of 3)
+                          properties:
+                            nodeCount:
+                              description: Number of TiKV nodes (must be multiple
+                                of 3, minimum 3)
+                              minimum: 3
+                              multipleOf: 3
+                              type: integer
+                            nodeSize:
+                              description: TiKV node specification key
+                              pattern: ^(4C16G|8C32G|8C64G|16C64G|32C128G)$
+                              type: string
+                            storage:
+                              description: Storage per node in GB (scale up only)
+                              maximum: 8000
+                              minimum: 200
+                              type: integer
+                          type: object
+                      type: object
+                    schedule:
+                      description: Cron schedule expression (5-field format)
+                      pattern: ^(@(annually|yearly|monthly|weekly|daily|hourly))|(@every
+                        (\d+(ns|us|µs|ms|s|m|h))+)|(((\*|(\d+,)*\d+|(\d+(\-|\/)\d+)|\*\/\d+)
+                        ){4}(\*|(\d+,)*\d+|(\d+(\-|\/)\d+)|\*\/\d+))$
+                      type: string
+                    settings:
+                      description: Settings for suspend/resume operations
+                      properties:
+                        force:
+                          description: Force suspend even if connections exist
+                          type: boolean
+                        gracePeriod:
+                          description: Grace period before force suspend
+                          type: string
+                        skipIfScaledDown:
+                          description: Skip suspend if cluster is already scaled down
+                          type: boolean
+                      type: object
+                    suspend:
+                      description: Suspend operation - if true, suspends the cluster
+                      type: boolean
+                  required:
+                  - schedule
+                  type: object
+                  x-kubernetes-validations:
+                  - message: exactly one of scale, suspend, or resume must be specified
+                    rule: (has(self.scale) && !has(self.suspend) && !has(self.resume))
+                      || (!has(self.scale) && has(self.suspend) && !has(self.resume))
+                      || (!has(self.scale) && !has(self.suspend) && has(self.resume))
+                type: array
+              settings:
+                description: Global settings
+                properties:
+                  concurrencyLimit:
+                    default: 3
+                    description: Maximum concurrent scaling operations
+                    maximum: 10
+                    minimum: 1
+                    type: integer
+                  operationTimeout:
+                    default: 30m
+                    description: Default timeout for scaling operations
+                    type: string
+                  retryConfig:
+                    description: Retry configuration for failed operations
+                    properties:
+                      backoffMultiplier:
+                        default: 200
+                        description: Backoff multiplier for retries (as percentage,
+                          200 = 2.0x)
+                        maximum: 500
+                        minimum: 100
+                        type: integer
+                      initialDelay:
+                        default: 1m
+                        description: Initial retry delay
+                        type: string
+                      maxDelay:
+                        default: 16m
+                        description: Maximum retry delay
+                        type: string
+                      maxRetries:
+                        default: 5
+                        description: Maximum retry attempts
+                        maximum: 10
+                        minimum: 0
+                        type: integer
+                    type: object
+                type: object
+              timezone:
+                default: UTC
+                description: Timezone for schedule interpretation (IANA format)
+                pattern: ^[A-Za-z_]+(/[A-Za-z_]+)*$
+                type: string
+            required:
+            - clusterRef
+            type: object
+          status:
+            description: status defines the observed state of TiDBClusterScheduler
+            properties:
+              activeSchedules:
+                description: Currently active schedules
+                items:
+                  description: ScheduleStatus defines execution status of individual
+                    schedules
+                  properties:
+                    executionCount:
+                      description: Total executions
+                      type: integer
+                    jobId:
+                      description: Cron job ID for tracking
+                      type: integer
+                    lastResult:
+                      description: Result of last execution
+                      type: string
+                    lastRun:
+                      description: Last execution time
+                      format: date-time
+                      type: string
+                    nextRun:
+                      description: Next scheduled execution
+                      format: date-time
+                      type: string
+                    schedule:
+                      description: Schedule expression
+                      type: string
+                  required:
+                  - jobId
+                  - schedule
+                  type: object
+                type: array
+              conditions:
+                description: Status conditions
+                items:
+                  description: SchedulerCondition defines scheduler status conditions
+                  properties:
+                    lastTransitionTime:
+                      description: Last time condition transitioned
+                      format: date-time
+                      type: string
+                    message:
+                      description: Message describing the condition
+                      type: string
+                    reason:
+                      description: Reason for the condition
+                      type: string
+                    status:
+                      description: Status of the condition
+                      type: string
+                    type:
+                      description: Type of condition
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - status
+                  - type
+                  type: object
+                type: array
+              failedOperations:
+                description: Failed operations awaiting retry
+                items:
+                  description: FailedOperation defines failed scaling operations for
+                    retry
+                  properties:
+                    error:
+                      description: Error message
+                      type: string
+                    failureTime:
+                      description: Failure timestamp
+                      format: date-time
+                      type: string
+                    maxRetries:
+                      description: Maximum retry attempts
+                      type: integer
+                    nextRetry:
+                      description: Next retry time
+                      format: date-time
+                      type: string
+                    operation:
+                      description: Operation that failed
+                      type: string
+                    retryCount:
+                      description: Retry attempt count
+                      type: integer
+                    schedule:
+                      description: Original schedule
+                      type: string
+                  required:
+                  - error
+                  - failureTime
+                  - operation
+                  - retryCount
+                  - schedule
+                  type: object
+                type: array
+              lastExecution:
+                description: Timestamp of last execution
+                format: date-time
+                type: string
+              observedGeneration:
+                description: Most recently observed generation
+                format: int64
+                type: integer
+              phase:
+                description: Current phase
+                enum:
+                - Pending
+                - Active
+                - Suspended
+                - Failed
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

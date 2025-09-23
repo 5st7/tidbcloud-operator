@@ -1,0 +1,59 @@
+apiVersion: scheduler.tsurai.jp/v1
+kind: TiDBClusterScheduler
+metadata:
+  labels:
+    app.kubernetes.io/name: tidbcluster-scheduler
+    app.kubernetes.io/instance: tidbclusterscheduler-sample
+    app.kubernetes.io/part-of: tidbcloud-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: tidbcloud-operator
+  name: tidbclusterscheduler-sample
+spec:
+  clusterRef:
+    projectId: "YOUR_PROJECT_ID"
+    clusterId: "YOUR_CLUSTER_ID"
+    clusterName: "your-cluster-name"
+    credentialsRef:
+      name: tidbcloud-credentials
+
+  timezone: "Asia/Tokyo"
+
+  schedules:
+    # Scale up for business hours (9 AM JST, Monday-Friday)
+    - schedule: "0 9 * * 1-5"
+      description: "Scale up for business hours"
+      scale:
+        tidb:
+          nodeCount: 4
+          nodeSize: "8C16G"
+        tikv:
+          nodeCount: 6
+          nodeSize: "16C64G"
+          storage: 1000
+    # Scale down for night time (11 PM JST, Monday-Friday)
+    - schedule: "0 23 * * 1-5"
+      description: "Scale down for night time"
+      scale:
+        tidb:
+          nodeCount: 2
+          nodeSize: "4C8G"
+        tikv:
+          nodeCount: 3
+          nodeSize: "8C16G"
+          storage: 500
+    # Weekend suspension (Saturday 2 AM JST)
+    - schedule: "0 2 * * 6"
+      description: "Weekend cost optimization - suspend"
+      suspend: true
+    # Resume on Monday (8 AM JST)
+    - schedule: "0 8 * * 1"
+      description: "Weekend cost optimization - resume"
+      resume: true
+  settings:
+    concurrencyLimit: 2
+    operationTimeout: "30m"
+    retryConfig:
+      maxRetries: 3
+      initialDelay: "1m"
+      backoffMultiplier: 200
+      maxDelay: "16m"
